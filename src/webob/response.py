@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from hashlib import md5
 import re
 import struct
-from urllib import parse as urlparse
 from urllib.parse import quote as url_quote
 import zlib
 
@@ -39,6 +38,7 @@ from webob.util import (
     status_generic_reasons,
     status_reasons,
     text_,
+    urljoin,
     warn_deprecation,
 )
 
@@ -1356,10 +1356,9 @@ class Response:
 
     @staticmethod
     def _make_location_absolute(environ, value):
-        # urllib.parse.urlsplit() (called internally by urljoin) strips
-        # ASCII tab, CR, and LF from the URL on Python 3.10+. Strip them
-        # ourselves first so they cannot be used to bypass the SCHEME_RE
-        # or protocol-relative ("//") checks below. See CVE-2024-42353,
+        # Strip ASCII tab, CR, and LF so they cannot be used to smuggle a
+        # protocol-relative URL past the checks below (user agents remove
+        # them when parsing a URL). See CVE-2024-42353,
         # https://github.com/Pylons/webob/security/advisories/GHSA-mg3v-6m49-jhp3,
         # and the follow-up advisory GHSA-fh3h-vg37-cc95.
         value = value.replace("\t", "").replace("\r", "").replace("\n", "")
@@ -1369,7 +1368,14 @@ class Response:
 
         if value.startswith("//"):
             value = f"/%2f{value[2:]}"
-        new_location = urlparse.urljoin(_request_uri(environ), value)
+
+        # urllib.parse.urljoin() removes ASCII tab/CR/LF anywhere in the
+        # URL and strips leading and trailing C0 control and space
+        # characters before parsing (Python 3.10+). That turns values such
+        # as " //evil.example" into protocol-relative URLs, bypassing the
+        # checks above. Use WebOb's own RFC 3986 urljoin(), which resolves
+        # the value exactly as given. See GHSA-6hx8-3wjj-gr8g.
+        new_location = urljoin(_request_uri(environ), value)
 
         return new_location
 

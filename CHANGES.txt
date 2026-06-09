@@ -25,6 +25,25 @@ Security Fix
 
   (Thix fix was released in WebOb 1.8.10)
 
+- The fixes for CVE-2024-42353 and GHSA-fh3h-vg37-cc95 were still
+  incomplete: besides removing tab, CR, and LF, ``urllib.parse.urljoin``
+  also strips leading and trailing C0 control and space characters from a
+  URL before parsing it. A Location value such as
+  ``" //www.example.com/test"`` could therefore still be interpreted as a
+  protocol-relative URL (and ``" https://www.example.com/test"`` as an
+  absolute one), allowing an open redirect.
+
+  WebOb no longer uses ``urllib.parse.urljoin`` and instead ships its own
+  implementation of the RFC 3986 reference resolution algorithm,
+  ``webob.util.urljoin``, which resolves the URL exactly as given without
+  removing any characters. It is now used to make the Location header
+  absolute, by ``Request.relative_url``, and by the ``_HTTPMove`` based
+  HTTP exceptions, which normalize the Location header through the same
+  code path as the Response object (so a protocol-relative location
+  passed to e.g. ``HTTPFound`` no longer redirects off-host either).
+
+  See https://github.com/Pylons/webob/security/advisories/GHSA-6hx8-3wjj-gr8g
+
 Feature
 ~~~~~~~
 

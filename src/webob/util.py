@@ -1,3 +1,4 @@
+import re
 import warnings
 
 from webob.compat import escape
@@ -77,6 +78,177 @@ def html_escape(s):
         s = s.encode("ascii", "xmlcharrefreplace")
 
     return text_(s)
+
+
+# RFC 3986 section 3.1: scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+_URI_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+\-.]*$")
+
+
+def _split_uri_reference(uri):
+    """Split a URI reference into its five components.
+
+    Returns a ``(scheme, authority, path, query, fragment)`` tuple,
+    following the grammar from RFC 3986 (see appendix B). Components that
+    are not present in the reference are ``None``. The path is always
+    present, but may be the empty string.
+
+    Unlike ``urllib.parse.urlsplit()``, no characters are ever removed
+    from the reference: ASCII tab/CR/LF and leading or trailing C0
+    control and space characters are treated like any other character.
+    """
+    scheme = authority = query = fragment = None
+
+    rest, sep, token = uri.partition("#")
+
+    if sep:
+        fragment = token
+
+    rest, sep, token = rest.partition("?")
+
+    if sep:
+        query = token
+
+    token, sep, candidate = rest.partition(":")
+
+    if sep and _URI_SCHEME_RE.match(token):
+        scheme = token
+        rest = candidate
+
+    if rest.startswith("//"):
+        end = rest.find("/", 2)
+
+        if end == -1:
+            authority, rest = rest[2:], ""
+        else:
+            authority, rest = rest[2:end], rest[end:]
+
+    return scheme, authority, rest, query, fragment
+
+
+def _remove_dot_segments(path):
+    """Remove ``.`` and ``..`` segments from a path (RFC 3986 5.2.4)."""
+    output = []
+
+    while path:
+        if path.startswith("../"):
+            path = path[3:]
+        elif path.startswith("./"):
+            path = path[2:]
+        elif path.startswith("/./"):
+            path = "/" + path[3:]
+        elif path == "/.":
+            path = "/"
+        elif path.startswith("/../"):
+            path = "/" + path[4:]
+
+            if output:
+                output.pop()
+        elif path == "/..":
+            path = "/"
+
+            if output:
+                output.pop()
+        elif path in (".", ".."):
+            path = ""
+        else:
+            end = path.find("/", 1) if path.startswith("/") else path.find("/")
+
+            if end == -1:
+                output.append(path)
+                path = ""
+            else:
+                output.append(path[:end])
+                path = path[end:]
+
+    return "".join(output)
+
+
+def _merge_paths(base_authority, base_path, path):
+    """Merge a relative-path reference with the base path (RFC 3986 5.2.3)."""
+
+    if base_authority is not None and base_path == "":
+        return "/" + path
+
+    if "/" in base_path:
+        return base_path[: base_path.rfind("/") + 1] + path
+
+    return path
+
+
+def urljoin(base, url):
+    """Resolve a URI reference relative to a base URI (RFC 3986 section 5).
+
+    A replacement for ``urllib.parse.urljoin()``. The standard library
+    implementation follows the WHATWG URL living standard (on Python
+    3.10+) by removing ASCII tab, CR, and LF anywhere in the URL and
+    stripping leading and trailing C0 control and space characters
+    before parsing. Those transformations can silently turn an otherwise
+    harmless relative reference such as ``" //evil.example"`` into a
+    protocol-relative or absolute URL, which has repeatedly led to open
+    redirect issues when normalizing the ``Location`` header (see
+    CVE-2024-42353/GHSA-mg3v-6m49-jhp3, GHSA-fh3h-vg37-cc95, and
+    GHSA-6hx8-3wjj-gr8g).
+
+    This implementation resolves the reference exactly as given,
+    character for character, with no whitespace removal whatsoever.
+    """
+    b_scheme, b_authority, b_path, b_query, b_fragment = _split_uri_reference(base)
+    r_scheme, r_authority, r_path, r_query, r_fragment = _split_uri_reference(url)
+
+    # Like urllib.parse.urljoin(), use the non-strict variant of the
+    # resolution algorithm (RFC 3986 5.2.2): a reference whose scheme
+    # matches the base scheme is treated as a relative reference.
+
+    if (
+        r_scheme is not None
+        and b_scheme is not None
+        and r_scheme.lower() == b_scheme.lower()
+    ):
+        r_scheme = None
+
+    if r_scheme is not None:
+        scheme = r_scheme
+        authority = r_authority
+        path = _remove_dot_segments(r_path)
+        query = r_query
+    elif r_authority is not None:
+        scheme = b_scheme
+        authority = r_authority
+        path = _remove_dot_segments(r_path)
+        query = r_query
+    elif r_path == "":
+        scheme = b_scheme
+        authority = b_authority
+        path = b_path
+        query = r_query if r_query is not None else b_query
+    else:
+        scheme = b_scheme
+        authority = b_authority
+
+        if r_path.startswith("/"):
+            path = _remove_dot_segments(r_path)
+        else:
+            path = _remove_dot_segments(_merge_paths(b_authority, b_path, r_path))
+        query = r_query
+    fragment = r_fragment
+
+    # Recompose the components (RFC 3986 5.3)
+    result = []
+
+    if scheme is not None:
+        result.append(scheme + ":")
+
+    if authority is not None:
+        result.append("//" + authority)
+    result.append(path)
+
+    if query is not None:
+        result.append("?" + query)
+
+    if fragment is not None:
+        result.append("#" + fragment)
+
+    return "".join(result)
 
 
 def header_docstring(header, rfc_section):
