@@ -174,8 +174,11 @@ def test_urljoin_does_not_strip_whitespace(reference, expected):
         ("http://a/b/c", "g#", "http://a/b/g#"),
         # base query/fragment are dropped when the reference has a path
         ("http://a/b/c?q#f", "g", "http://a/b/g"),
-        # base fragment is never inherited
-        ("http://a/b/c#f", "", "http://a/b/c"),
+        # degenerate input short-circuits, like urllib.parse.urljoin()
+        ("http://a/b/c#f", "", "http://a/b/c#f"),
+        ("http://a/b/c", None, "http://a/b/c"),
+        ("", "g", "g"),
+        (None, "g", "g"),
     ],
 )
 def test_urljoin_component_edge_cases(base, reference, expected):

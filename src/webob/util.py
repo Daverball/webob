@@ -192,6 +192,17 @@ def urljoin(base, url):
     This implementation resolves the reference exactly as given,
     character for character, with no whitespace removal whatsoever.
     """
+
+    # Mirror urllib.parse.urljoin()'s short-circuits for degenerate input
+    # (such as a reference of None or the empty string), which callers of
+    # Request.relative_url() may rely on.
+
+    if not base:
+        return url
+
+    if not url:
+        return base
+
     b_scheme, b_authority, b_path, b_query, b_fragment = _split_uri_reference(base)
     r_scheme, r_authority, r_path, r_query, r_fragment = _split_uri_reference(url)
 
