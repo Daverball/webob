@@ -476,6 +476,64 @@ def test_HTTPMove_call_query_string():
     assert m(environ, start_response) == []
 
 
+@pytest.mark.parametrize(
+    "location, expected",
+    [
+        # protocol-relative URLs must not redirect off-host, just like
+        # Response.location (CVE-2024-42353)
+        ("//www.example.com/test", "http://localhost/%2fwww.example.com/test"),
+        # whitespace must not be usable to smuggle a protocol-relative or
+        # absolute URL past the checks (GHSA-fh3h-vg37-cc95 and
+        # GHSA-6hx8-3wjj-gr8g)
+        ("/\t/www.example.com/test", "http://localhost/%2fwww.example.com/test"),
+        (" //www.example.com/test", "http://localhost/ //www.example.com/test"),
+        (
+            " https://www.example.com/test",
+            "http://localhost/ https://www.example.com/test",
+        ),
+        # relative and absolute locations keep working
+        ("test", "http://localhost/test"),
+        ("/test", "http://localhost/test"),
+        ("https://www.example.com/test", "https://www.example.com/test"),
+    ],
+)
+def test_HTTPMove_location_no_open_redirect(location, expected):
+    headers = []
+
+    def start_response(status, response_headers, exc_info=None):
+        headers[:] = response_headers
+
+    environ = {
+        "wsgi.url_scheme": "http",
+        "SERVER_NAME": "localhost",
+        "SERVER_PORT": "80",
+        "REQUEST_METHOD": "HEAD",
+        "PATH_INFO": "/",
+    }
+    m = webob_exc._HTTPMove(location=location)
+    assert m(environ, start_response) == []
+    assert dict(headers)["Location"] == expected
+    assert m.location == expected
+
+
+def test_HTTPMove_location_none_defaults_to_request_url():
+    headers = []
+
+    def start_response(status, response_headers, exc_info=None):
+        headers[:] = response_headers
+
+    environ = {
+        "wsgi.url_scheme": "http",
+        "SERVER_NAME": "localhost",
+        "SERVER_PORT": "80",
+        "REQUEST_METHOD": "HEAD",
+        "PATH_INFO": "/",
+    }
+    m = webob_exc._HTTPMove()
+    assert m(environ, start_response) == []
+    assert dict(headers)["Location"] == "http://localhost/"
+
+
 def test_HTTPFound_unused_environ_variable():
     class Crashy:
         def __str__(self):
