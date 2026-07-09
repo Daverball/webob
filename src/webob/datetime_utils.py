@@ -22,7 +22,19 @@ __all__ = [
     "utcnow",
 ]
 
-_now = datetime.now  # hook point for unit tests
+
+def utcnow():
+    """
+    replacement of deprecated datetime.datetime.utcnow
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# Hook point for unit tests. This is UTC based, not local: the values derived
+# from it are serialized as GMT, so adding a delta to a local "now" would put
+# the result out by the machine's UTC offset. See
+# https://github.com/Pylons/webob/issues/430
+_now = utcnow
 
 
 class _UTC(tzinfo):
@@ -85,6 +97,9 @@ def serialize_date(dt):
         return text_(dt)
 
     if isinstance(dt, timedelta):
+        # The result is serialized as GMT (``usegmt=True`` below) via
+        # ``calendar.timegm``, which reads the time tuple as UTC, so the "now"
+        # the delta is added to must be UTC too.
         dt = _now() + dt
 
     if isinstance(dt, (datetime, date)):
@@ -122,10 +137,3 @@ def serialize_date_delta(value):
         return str(int(value))
     else:
         return serialize_date(value)
-
-
-def utcnow():
-    """
-    replacement of deprecated datetime.datetime.utcnow
-    """
-    return datetime.now(timezone.utc).replace(tzinfo=None)

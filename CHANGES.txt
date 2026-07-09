@@ -120,6 +120,16 @@ Bugfix
   wall-clock time out as GMT. Naive datetimes continue to be treated as UTC.
   See https://github.com/Pylons/webob/pull/475
 
+- Date headers computed from a ``timedelta`` are now based on UTC instead of
+  naive local time. ``webob.datetime_utils`` added the delta to
+  ``datetime.datetime.now()``, which is local, and the result was then
+  serialized as GMT, so the value was off by the machine's UTC offset. This
+  affected setting a header via a ``timedelta`` (such as ``Response.expires``)
+  and reading back a delta-seconds header (such as ``Response.retry_after``).
+  ``Response.cache_expires`` was already correct. See
+  https://github.com/Pylons/webob/issues/430 and
+  https://github.com/Pylons/webob/pull/491
+
 - Response.content_type now accepts unicode strings on Python 2 and encodes
   them to latin-1. See https://github.com/Pylons/webob/pull/389 and
   https://github.com/Pylons/webob/issues/388

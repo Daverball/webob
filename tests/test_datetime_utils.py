@@ -1,6 +1,8 @@
 import calendar
 import datetime
-from email.utils import formatdate
+from email.utils import formatdate, parsedate
+import os
+import time
 
 import pytest
 
@@ -67,12 +69,54 @@ def test_serialize_date():
     assert isinstance(ret, str)
     assert ret == "Mon, 20 Nov 1995 19:12:08 GMT"
     dt = formatdate(
-        calendar.timegm((datetime.datetime.now() + datetime.timedelta(1)).timetuple()),
+        calendar.timegm((datetime_utils.utcnow() + datetime.timedelta(1)).timetuple()),
         usegmt=True,
     )
     assert dt == datetime_utils.serialize_date(datetime.timedelta(1))
     with pytest.raises(ValueError):
         datetime_utils.serialize_date(None)
+
+
+@pytest.mark.skipif(
+    not hasattr(time, "tzset"),
+    reason="time.tzset() (setting the process timezone) is not available",
+)
+def test_serialize_date_timedelta_is_utc_based():
+    """A timedelta must be added to *UTC* now, not naive local time.
+
+    ``serialize_date`` labels its output as GMT (``usegmt=True``) and builds the
+    epoch with ``calendar.timegm`` (which treats the time tuple as UTC).  If the
+    "now" the delta is added to is naive local time, the resulting header ends
+    up off by the local UTC offset.  See
+    https://github.com/Pylons/webob/issues/430.
+
+    Running under a non-UTC timezone, the serialized zero-delta header must
+    still match the current UTC time (within a small tolerance for the second
+    boundary), regardless of the local offset.
+    """
+    old_tz = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "America/New_York"  # non-UTC, DST-having offset
+        time.tzset()
+
+        before = datetime_utils.utcnow()
+        header = datetime_utils.serialize_date(datetime.timedelta(seconds=0))
+        after = datetime_utils.utcnow()
+
+        header_ts = calendar.timegm(parsedate(header))
+        assert header_ts is not None, header
+        lower = calendar.timegm(before.timetuple()) - 1
+        upper = calendar.timegm(after.timetuple()) + 1
+        assert lower <= header_ts <= upper, (
+            "Expires header %r (%d) is not within [%d, %d] of UTC now; "
+            "it appears to use naive local time" % (header, header_ts, lower, upper)
+        )
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        time.tzset()
 
 
 def test_parse_date_delta():
@@ -91,6 +135,40 @@ def test_parse_date_delta():
     with _NowRestorer(WHEN):
         ret = datetime_utils.parse_date_delta(1)
         assert ret == WHEN + datetime.timedelta(0, 1)
+
+
+@pytest.mark.skipif(
+    not hasattr(time, "tzset"),
+    reason="time.tzset() (setting the process timezone) is not available",
+)
+def test_parse_date_delta_is_utc_based():
+    """
+    Delta seconds are resolved against UTC now, not naive local time. Reading
+    back a delta-seconds header (such as ``Response.retry_after``) otherwise
+    returns an instant off by the local UTC offset. See
+    https://github.com/Pylons/webob/issues/430
+    """
+    old_tz = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "America/New_York"  # non-UTC, DST-having offset
+        time.tzset()
+
+        # Note: a falsy value returns None, so the delta must be non-zero.
+        delta = datetime.timedelta(seconds=1)
+        before = datetime_utils.utcnow() + delta
+        ret = datetime_utils.parse_date_delta(1)
+        after = datetime_utils.utcnow() + delta
+    finally:
+        if old_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old_tz
+        time.tzset()
+
+    assert before <= ret <= after, (
+        "parse_date_delta(1) returned %r, outside [%r, %r]; it appears to use "
+        "naive local time" % (ret, before, after)
+    )
 
 
 def test_serialize_date_delta():
