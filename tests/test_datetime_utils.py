@@ -112,6 +112,15 @@ def test_timedelta_to_seconds():
     assert result == 7464960000
 
 
+def test_utcnow():
+    """utcnow() is a drop-in for the deprecated datetime.utcnow()."""
+    before = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    result = datetime_utils.utcnow()
+    after = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    assert result.tzinfo is None
+    assert before <= result <= after
+
+
 class _NowRestorer:
     def __init__(self, new_now):
         self._new_now = new_now
