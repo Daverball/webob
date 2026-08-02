@@ -50,7 +50,7 @@ from webob.descriptors import (
 from webob.etag import AnyETag, IfRange, NoETag, etag_property
 from webob.headers import EnvironHeaders
 from webob.multidict import GetDict, MultiDict, NestedMultiDict, NoVars
-from webob.util import bytes_, parse_qsl_text, text_, url_unquote
+from webob.util import bytes_, parse_qsl_text, text_, url_unquote, urljoin
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -596,7 +596,11 @@ class BaseRequest:
         else:
             url = self.path_url
 
-        return urlparse.urljoin(url, other_url)
+        # Use WebOb's own RFC 3986 urljoin() rather than
+        # urllib.parse.urljoin(), which removes ASCII tab/CR/LF and strips
+        # leading/trailing C0 control and space characters before parsing.
+
+        return urljoin(url, other_url)
 
     def path_info_pop(self, pattern: Pattern[str] | None = None) -> str | None:
         """

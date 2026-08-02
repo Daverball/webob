@@ -1148,6 +1148,54 @@ def test__make_location_absolute_strips_url_whitespace(payload):
     assert result == "http://example.com/%2fwww.example.com/test"
 
 
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        (
+            " //www.example.com/test",
+            "http://localhost/ //www.example.com/test",
+        ),
+        (
+            "\x00//www.example.com/test",
+            "http://localhost/\x00//www.example.com/test",
+        ),
+        (
+            "\x1f//www.example.com/test",
+            "http://localhost/\x1f//www.example.com/test",
+        ),
+        (
+            " \t//www.example.com/test",
+            "http://localhost/ //www.example.com/test",
+        ),
+        (
+            " //www.example.com/test ",
+            "http://localhost/ //www.example.com/test ",
+        ),
+        (
+            " https://www.example.com/test",
+            "http://localhost/ https://www.example.com/test",
+        ),
+        (
+            "\x00https://www.example.com/test",
+            "http://localhost/\x00https://www.example.com/test",
+        ),
+    ],
+)
+def test_location_no_open_redirect_c0_control_or_space(payload, expected):
+    # Follow-up to GHSA-fh3h-vg37-cc95. urllib.parse.urljoin() also strips
+    # leading/trailing C0 control and space characters before parsing, so
+    # a Location value such as " //www.example.com/test" was still parsed
+    # as protocol-relative (and " https://www.example.com/test" as
+    # absolute), bypassing the SCHEME_RE and "//" checks. WebOb now uses
+    # its own RFC 3986 urljoin() that resolves the value exactly as given,
+    # keeping the redirect on the request's host. See GHSA-6hx8-3wjj-gr8g.
+    res = Response()
+    res.status = "301"
+    res.location = payload
+    req = Request.blank("/")
+    assert req.get_response(res).location == expected
+
+
 @pytest.mark.xfail(
     sys.version_info < (3, 0),
     reason="Python 2.x unicode != str, WSGI requires str. Test "

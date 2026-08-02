@@ -172,7 +172,6 @@ import re
 from string import Template
 import sys
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
-from urllib import parse as urlparse
 
 from webob.acceptparse import create_accept_header
 from webob.request import Request
@@ -619,7 +618,15 @@ ${html_comment}""")
             if req.environ.get("QUERY_STRING"):
                 url += "?" + req.environ["QUERY_STRING"]
             self.location = url
-        self.location = urlparse.urljoin(req.path_url, self.location)
+
+        if self.location:
+            # Normalize the location through the same code path used for
+            # the Location header so that a relative (or protocol-relative)
+            # location cannot turn into an open redirect. See
+            # CVE-2024-42353, GHSA-fh3h-vg37-cc95, and GHSA-6hx8-3wjj-gr8g.
+            self.location = self._make_location_absolute(environ, self.location)
+        else:
+            self.location = req.path_url
 
         return super().__call__(environ, start_response)
 

@@ -18,6 +18,7 @@ from webob.response import Response
 from webob.util import html_escape
 
 __all__ = [
+    "BaseRequest",
     "Request",
     "Response",
     "UTC",

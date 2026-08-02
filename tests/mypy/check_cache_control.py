@@ -4,8 +4,8 @@ from typing import Any, Literal, Union
 
 from typing_extensions import assert_type
 
+from webob import BaseRequest
 from webob.cachecontrol import CacheControl
-from webob.request import BaseRequest
 from webob.response import Response
 
 req = BaseRequest({})
