@@ -12,7 +12,7 @@ except IOError:
     README = CHANGES = ""
 
 testing_extras = [
-    "pytest >= 3.1.0",  # >= 3.1.0 so we can use pytest.param
+    "pytest >= 6.2.0",  # >= 6.2.0 so we can use pytest.MonkeyPatch
     "coverage",
     "pytest-cov",
     "pytest-xdist",

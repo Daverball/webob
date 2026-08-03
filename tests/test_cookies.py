@@ -1,5 +1,4 @@
 from datetime import date, datetime, timedelta, timezone
-import os
 import time
 
 import pytest
@@ -191,23 +190,14 @@ def test_serialize_cookie_date_aware_datetime():
     not hasattr(time, "tzset"),
     reason="time.tzset() (setting the process timezone) is not available",
 )
-def test_serialize_cookie_date_naive_datetime_is_utc():
+def test_serialize_cookie_date_naive_datetime_is_utc(local_timezone):
     """
     A naive datetime is assumed to already be UTC and must not be shifted by
     the local UTC offset, which is how WebOb has always treated them.
     """
     naive = datetime(2011, 1, 4, 13, 43, 50)
-    old_tz = os.environ.get("TZ")
-    try:
-        os.environ["TZ"] = "America/New_York"
-        time.tzset()
+    with local_timezone("America/New_York"):
         result = cookies.serialize_cookie_date(naive)
-    finally:
-        if old_tz is None:
-            del os.environ["TZ"]
-        else:
-            os.environ["TZ"] = old_tz
-        time.tzset()
     assert result == b"Tue, 04-Jan-2011 13:43:50 GMT"
 
 
