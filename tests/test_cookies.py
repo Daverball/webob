@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
+import time
 
 import pytest
 
@@ -169,6 +170,35 @@ def test_serialize_cookie_date():
     cdate_delta = cookies.serialize_cookie_date(timedelta(seconds=10))
     cdate_int = cookies.serialize_cookie_date(10)
     assert cdate_delta == cdate_int
+
+
+def test_serialize_cookie_date_date():
+    """A plain date has no time component and serializes at midnight."""
+    assert (
+        cookies.serialize_cookie_date(date(2011, 1, 4))
+        == b"Tue, 04-Jan-2011 00:00:00 GMT"
+    )
+
+
+def test_serialize_cookie_date_aware_datetime():
+    """An aware datetime is converted to UTC before being serialized."""
+    aware = datetime(2011, 1, 4, 13, 43, 50, tzinfo=timezone(timedelta(hours=2)))
+    assert cookies.serialize_cookie_date(aware) == b"Tue, 04-Jan-2011 11:43:50 GMT"
+
+
+@pytest.mark.skipif(
+    not hasattr(time, "tzset"),
+    reason="time.tzset() (setting the process timezone) is not available",
+)
+def test_serialize_cookie_date_naive_datetime_is_utc(local_timezone):
+    """
+    A naive datetime is assumed to already be UTC and must not be shifted by
+    the local UTC offset, which is how WebOb has always treated them.
+    """
+    naive = datetime(2011, 1, 4, 13, 43, 50)
+    with local_timezone("America/New_York"):
+        result = cookies.serialize_cookie_date(naive)
+    assert result == b"Tue, 04-Jan-2011 13:43:50 GMT"
 
 
 def test_serialize_samesite():

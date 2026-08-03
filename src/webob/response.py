@@ -1,5 +1,5 @@
 from base64 import b64encode
-from datetime import datetime, timedelta
+from datetime import timedelta
 from hashlib import md5
 import re
 import struct
@@ -13,6 +13,7 @@ from webob.datetime_utils import (
     parse_date_delta,
     serialize_date_delta,
     timedelta_to_seconds,
+    utcnow,
 )
 from webob.descriptors import (
     CHARSET_RE,
@@ -1246,6 +1247,10 @@ class Response:
             seconds = timedelta_to_seconds(seconds)
         cache_control = self.cache_control
 
+        # Evaluated once so that ``expires`` and ``last_modified`` cannot
+        # straddle a second boundary and disagree.
+        now = utcnow()
+
         if seconds is None:
             pass
         elif not seconds:
@@ -1259,15 +1264,15 @@ class Response:
             cache_control.max_age = 0
             cache_control.post_check = 0
             cache_control.pre_check = 0
-            self.expires = datetime.utcnow()
+            self.expires = now
 
             if "last-modified" not in self.headers:
-                self.last_modified = datetime.utcnow()
+                self.last_modified = now
             self.pragma = "no-cache"
         else:
             cache_control.properties.clear()
             cache_control.max_age = seconds
-            self.expires = datetime.utcnow() + timedelta(seconds=seconds)
+            self.expires = now + timedelta(seconds=seconds)
             self.pragma = None
 
         for name, value in kw.items():
