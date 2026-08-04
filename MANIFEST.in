@@ -9,6 +9,7 @@ include contributing.md RELEASING.rst
 include pyproject.toml
 include .coveragerc .flake8 tox.ini
 include .readthedocs.yaml
+include .mailmap
 
 global-exclude __pycache__ *.py[cod]
 global-exclude .DS_Store

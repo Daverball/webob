@@ -68,11 +68,37 @@ Feature
 Compatibility
 ~~~~~~~~~~~~~
 
+- Replace the uses of ``datetime.datetime.utcnow()``, which is deprecated as of
+  Python 3.12, with a ``webob.datetime_utils.utcnow()`` helper built on
+  ``datetime.datetime.now(datetime.timezone.utc)``. The helper returns a naive
+  UTC datetime, so the values WebOb exposes are unchanged. See
+  https://github.com/Pylons/webob/issues/473,
+  https://github.com/Pylons/webob/pull/475 and
+  https://github.com/Pylons/webob/pull/480
 
 Backwards Incompatibilities
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Drop support for Python 2.7, 3.4, 3.5, 3.6, 3.7, 3.8 and 3.9
+
+- The date helpers ``parse_date``, ``parse_date_delta``, ``serialize_date``,
+  ``serialize_date_delta`` and ``timedelta_to_seconds`` are no longer
+  re-exported from the top-level ``webob`` package. They moved to
+  ``webob.datetime_utils`` in WebOb 0.9.7 and have been re-exported from
+  ``webob`` for backwards compatibility ever since, but were never documented
+  or listed in ``webob.__all__``. Import them from ``webob.datetime_utils``
+  instead.
+
+  The ``UTC`` tzinfo object and the ``year``, ``month``, ``week``, ``day``,
+  ``hour``, ``minute`` and ``second`` timedelta constants are unaffected and
+  remain importable from ``webob``.
+
+- ``BaseRequest`` is now listed in ``webob.__all__``. It was already
+  importable from ``webob``, but its absence from ``__all__`` meant type
+  checkers would reject ``from webob import BaseRequest`` once WebOb ships a
+  ``py.typed`` marker.
+
+  See https://github.com/Pylons/webob/issues/457
 
 Experimental Features
 ~~~~~~~~~~~~~~~~~~~~~
@@ -107,6 +133,21 @@ Experimental Features
 
 Bugfix
 ~~~~~~
+
+- ``webob.cookies.serialize_cookie_date()`` now converts a timezone-aware
+  ``datetime`` to UTC before serializing it, instead of writing its local
+  wall-clock time out as GMT. Naive datetimes continue to be treated as UTC.
+  See https://github.com/Pylons/webob/pull/475
+
+- Date headers computed from a ``timedelta`` are now based on UTC instead of
+  naive local time. ``webob.datetime_utils`` added the delta to
+  ``datetime.datetime.now()``, which is local, and the result was then
+  serialized as GMT, so the value was off by the machine's UTC offset. This
+  affected setting a header via a ``timedelta`` (such as ``Response.expires``)
+  and reading back a delta-seconds header (such as ``Response.retry_after``).
+  ``Response.cache_expires`` was already correct. See
+  https://github.com/Pylons/webob/issues/430 and
+  https://github.com/Pylons/webob/pull/491
 
 - Response.content_type now accepts unicode strings on Python 2 and encodes
   them to latin-1. See https://github.com/Pylons/webob/pull/389 and

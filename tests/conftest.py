@@ -2,6 +2,7 @@ from contextlib import contextmanager
 import logging
 import random
 import threading
+import time
 from wsgiref.simple_server import (
     ServerHandler,
     WSGIRequestHandler,
@@ -45,6 +46,25 @@ def _make_test_server(app):
         except BaseException:
             if i == 1:
                 raise
+
+
+@pytest.fixture
+def local_timezone():
+    """Run a block of code under a given process timezone.
+
+    ``monkeypatch`` restores ``TZ`` on exit, but the C library keeps the old
+    zone cached until ``tzset()`` is called again, so we do that afterwards.
+    """
+
+    @contextmanager
+    def _local_timezone(tz):
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setenv("TZ", tz)
+            time.tzset()
+            yield
+        time.tzset()
+
+    return _local_timezone
 
 
 @pytest.fixture

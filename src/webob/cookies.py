@@ -11,7 +11,7 @@ from collections.abc import (
     MutableMapping,
     ValuesView,
 )
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
@@ -21,6 +21,7 @@ import time
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, overload
 import warnings
 
+from webob.datetime_utils import utcnow
 from webob.util import bytes_, text_
 
 if TYPE_CHECKING:
@@ -309,10 +310,17 @@ def serialize_cookie_date(
         v = timedelta(seconds=v)
 
     if isinstance(v, timedelta):
-        v = datetime.utcnow() + v
+        v = utcnow() + v
 
-    if isinstance(v, (datetime, date)):
+    if isinstance(v, datetime):
+        # An aware datetime is converted to UTC; a naive one is assumed to
+        # already be UTC, which is how WebOb has always treated them.
+        if v.tzinfo is not None:
+            v = v.astimezone(timezone.utc)
         v = v.timetuple()
+    elif isinstance(v, date):
+        v = v.timetuple()
+
     r = time.strftime("%%s, %d-%%s-%Y %H:%M:%S GMT", v)
 
     return bytes_(r % (weekdays[v[6]], months[v[1]]), "ascii")
